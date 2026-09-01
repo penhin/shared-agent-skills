@@ -14,6 +14,8 @@ Clone this repository, then run the setup script for the environment you use:
 bash ./scripts/install-global.sh
 ```
 
+Use `-Force` or `--force` only when replacing an existing global skill link.
+
 The script links the repository's `.agents/skills` directory into the user-level
 Codex skill directory, so the skills are available when Codex starts in any
 repository.
