@@ -1,10 +1,11 @@
 # Shared agent skills
 
-This repository is the shared source for Codex and Pi skills on Windows and WSL.
+This repository is the shared source for Codex, Pi, Claude Code, and other
+coding-agent skills on Windows and WSL.
 
 - Windows path: `D:\dev\skills`
 - WSL path: `/mnt/d/dev/skills`
-- Codex repository skill entrypoint: `.agents/skills`
+- Shared skill entrypoint: `.agents/skills`
 - Each skill directory under `.agents/skills` contains a required `SKILL.md`.
 - Keep skill names lowercase and use letters, digits, and hyphens only.
 - Reference scripts, assets, and documentation with paths relative to the skill directory.
@@ -15,6 +16,8 @@ available from every repository on a machine, run one of these after cloning:
 - Windows PowerShell: `./scripts/install-global.ps1`
 - WSL: `./scripts/install-global.sh`
 
-The scripts create the user-level `$HOME/.agents/skills` link used by Codex.
+The PowerShell and shell scripts create the user-level `$HOME/.agents/skills`
+link used by Codex. Other agents should point their own global skill directory
+at the same `.agents/skills` source.
 
 Runtime state and npm packages live elsewhere under `D:\dev`; they are intentionally not part of this repository.
