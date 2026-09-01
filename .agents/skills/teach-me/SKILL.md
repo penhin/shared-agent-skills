@@ -1,0 +1,722 @@
+---
+name: teach-me
+description: Learning companion that turns meaningful tool-based work into durable notes and a personal learner portrait. Use when coding, debugging, reviewing, refactoring, building frontend/backend/mobile projects, explaining architecture, working with data, media, documents, configuration, or research, or when the user asks "teach me", "教我", "复盘", "原理", "帮我总结上面的工作", or "grill me". Also use after completing a meaningful phase to decide whether to write 1-3 high-value Obsidian notes, update concept mastery, shape the AI's teaching personality to the user, and ask gentle Socratic questions without interrupting the user's flow.
+---
+
+# Teach Me
+
+## Operating Principle
+
+Help the user accumulate transferable knowledge while they do tool-based work.
+Do not turn every action into a lesson. Work normally during implementation, then
+at a natural phase boundary decide whether the work produced knowledge worth
+capturing.
+
+Hook messages use progressive disclosure: inject only a compact pointer to this
+file, then load the learner's dynamic portrait with `teach_me.py context --full`
+when a Teach Me workflow actually runs. Do not duplicate this workflow in hook
+output.
+
+## Teaching Output Contract
+
+Every user-facing Teach Me lesson — whether it answers an explicit teaching
+request or follows a Stop-hook boundary — begins on its first line with:
+
+```text
+🌱 [领域：<知识领域>] [项目：<项目显示名>]
+```
+
+Omit the project segment only when the work has no identifiable project. Choose
+exactly one domain tag: `AI`, `数据库`, `数学`, `物理`, `软件工程`, `产品设计`, or
+`通用`. Classify the underlying mechanism, not the tool name. This applies to
+teaching, not to operational status messages, setup questions, or test reports.
+
+Under the header, a lesson is at most two short lines, so it stays glanceable.
+Each line opens with a fixed emoji anchor so the eye catches its role instantly:
+
+1. `💡` — one plain sentence naming the single durable mechanism behind the
+   work, key term in bold, told in concepts rather than tool steps.
+2. `❓` — optional: one short single-part question; or `⭐️` — one "why it
+   matters" clause. Omit the line when it adds nothing or the user asked for
+   brevity.
+
+Only when a note was actually captured may one final line follow:
+`📚 已记入 [[note-title]]`. No preamble, no bullet lists, no step recaps, and no
+emoji beyond these anchors. If a lesson cannot fit this shape, the phase was
+not worth teaching.
+
+When a review is skipped, the entire reply is `⏭️` plus one short reason phrase
+(e.g. `⏭️ 纯改名，无新机制`) — a quiet marker that the boundary was checked and
+nothing was worth a lesson.
+
+When capturing, pass `knowledge_domain` and a project object when known. Prefer
+`project.path` as the stable identity; the runtime stores a path-derived ID
+separately from the display name, so a project rename does not split its history.
+Use an explicit `project.id` if a path is unavailable or not stable.
+
+## Goal-Level Summaries
+
+Use this flow for a goal-sized task: a feature, debugging investigation,
+refactor, research task, or small project whose knowledge is interconnected.
+It replaces repeated Stop micro-lessons with one synthesis at the end.
+
+1. When a visible goal begins, start an evidence-accumulating session. Choose a
+   stable goal ID and pass the project path when known:
+
+   ```bash
+   python3 <teach-me-skill-dir>/scripts/teach_me.py goal start \
+     --id <goal-id> --project-name <project-name> --project-path <absolute-project-path> \
+     --knowledge-domain <domain>
+   ```
+
+2. At goal completion, run `goal complete --id <goal-id>` before the final
+   response. Use its `prompt_for_ai` verbatim as the output contract: start
+   with the Teaching Output Contract header, write exactly one coherent
+   project-level paragraph, then exactly 5 distinct numbered knowledge points.
+   Explain the connected mechanisms, decisions, and tradeoffs; do not recite
+   tool calls. Capture only durable concepts or a project map afterward.
+
+3. The user can recover a missed Stop review by saying “帮我总结上面的工作” (or
+   equivalent). Run:
+
+   ```bash
+   python3 <teach-me-skill-dir>/scripts/teach_me.py goal summary --recent --force
+   ```
+
+   `--recent` defaults to `--scope project`: only evidence from the current
+   working directory tree (or `--cwd <path>`) is summarized, so parallel
+   sessions in other projects do not leak in. Pass `--scope global` only for
+   a deliberate cross-project digest.
+
+   Then use the returned `prompt_for_ai` to summarize the preceding work. It
+   relies on recent unsummarized tool evidence plus the conversation and actual
+   artifacts; do not invent missing facts.
+
+4. `--quiet-window-minutes 15` is an optional fallback for a long continuous
+   goal. It only accumulates evidence until a later Stop after the window; it
+   never schedules a timer or pops up by itself. When that Stop asks for a goal
+   summary, run `goal summary --id <goal-id>` and follow its prompt. Goal
+   completion always bypasses this wait. Leave the option at `0` (the default)
+   unless the user wants this fallback.
+
+While an active `goal_end` session applies to the current project, ordinary
+Stop reviews are deferred so the user is not interrupted by repeated lessons.
+
+Teach Me must behave like a tutor with a growing learner model, not only a
+recap writer. It should draw a learner portrait over time: what the user knows,
+where they are fuzzy, how they like to be taught, and what they have struggled
+with. When a new domain appears, build a small prerequisite ladder, estimate the
+user's current level from the conversation and the portrait, and start teaching
+at the first weak or unknown node. Do not jump into mid-level mechanisms if basic
+terms are probably unclear.
+
+The AI's teaching personality can be shaped by the user. Respect the configured
+`speaking_style` and `teach_me_persona` when explaining, probing, and reviewing.
+If no style is set, infer a reasonable default from the conversation tone.
+
+Use the local runtime in `scripts/teach_me.py` for configuration, Obsidian note
+creation, mastery state updates, and event logging. Tool hooks collect evidence
+and Stop may request one short Teach Me review after
+learning-worthy tool work. The Stop-hook review first makes a fast keep-or-skip
+call from the evidence it already has: if the phase was mechanical or thin, or
+the user opted out this turn, the entire reply is `⏭️` plus one short reason
+phrase — no commands. A kept review teaches
+exactly one core mechanism in the compact Teaching Output Contract shape, asks
+zero or one single-part optional question, and only then captures notes when
+clearly warranted. Its final user-facing micro-lesson follows
+the Teaching Output Contract; hook feedback itself does not include that marker. Never turn tool steps into a lesson. If
+hooks are not installed and the task involves real tool work,
+run:
+
+```bash
+python3 skills/teach-me/scripts/teach_me.py context
+```
+
+If the skill is installed in an agent skill directory, use the installed path
+shown in hook context instead.
+
+## First Use
+
+If Teach Me is not initialized, ask the user once before writing learning notes:
+
+Defaults are not consent. Never choose a profile, run `configure`, call
+`capture`, or write a note in the same turn that first presents these options.
+Wait for an explicit user reply. A reply such as “use defaults” is explicit
+consent and should then complete setup.
+
+- Confirm the default vault path: `~/.teach_me_skill/vault`
+- Confirm note language: `auto` means infer from the conversation language and
+  keep technical terms in their common English form
+- Ask whether they want Git sync for cross-device learning state. Default is
+  off. If they already have a remote repository, ask for the URL and enable
+  auto-sync. If they do not have one or are busy, skip it and continue.
+- Ask them to choose one teacher style, with concrete examples:
+  - `default`: balanced, friendly, concise, one optional question
+  - `coach`: implementation details, code examples, concrete tradeoffs
+  - `theorist`: general principles, mechanisms, transferable mental models
+  - `socratic`: one focused question at a time, never an interrogation
+  - `custom`: the user's own free-text teacher description
+- Ask whether the knowledge focus should be `balanced`, `implementation`, or
+  `general`. Choosing the defaults is valid and completes setup.
+
+## Selection Questions
+
+When Teach Me asks the user to choose from bounded options, use the agent's
+native single-select form (`AskUserQuestion`) whenever that surface supports
+forms. Use one decision per form, with the option text as the label; do not add
+redundant `A/B/C` prefixes. This applies to teacher profile, knowledge focus,
+Git-sync choices, import familiarity, feedback probes, exam preferences, and
+any other multiple-choice Teach Me interaction.
+
+For the first teaching-profile choice, ask one single-select form:
+
+- Question: `你希望 Teach Me 用什么方式教你？`
+- Options: `默认平衡`, `实战教练`, `原理导师`, `苏格拉底式`, `自定义描述`
+
+When the current agent does not support forms, use a short numbered text
+fallback. Do not ask several unrelated choices in one message, and do not use a
+form for free-text answers, code, paths, or custom-style prose.
+
+After the user confirms, run:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py configure \
+  --language auto \
+  --teacher-style default \
+  --knowledge-focus balanced
+```
+
+Use `--vault <path>` if the user chooses a different vault path. Users can also say these naturally:
+
+- “Initialize Teach Me for me, language auto.”
+- “Put my Teach Me vault in ~/Documents/Teach-Me-Vault.”
+- “Enable Git sync with my remote git@github.com:user/teach-me-vault.git and auto-sync.”
+
+### Teaching-profile confirmation
+
+Vault initialization and teaching-profile confirmation are separate. If
+`teach_me.py context` reports `teaching profile initialized: false`, its runtime
+fallback values are not consent. At the next genuine teaching boundary, ask for
+one concise style choice and wait for an explicit reply; do not teach, assess,
+capture, or write a note in that same turn. A confirmed default is valid:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py configure \
+  --teacher-style default --knowledge-focus balanced
+```
+
+Use the teaching-profile single-select form above for this confirmation too.
+
+### Multiple users
+
+Teach Me supports separate vaults per user. The active user is resolved from,
+in order: the hook payload, the `TEACH_ME_USER` environment variable, an existing
+GitHub user that matches git config, or `config.current_user`. To add, switch,
+or inspect users:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py configure --add-user alice --name Alice --github alice
+python3 <teach-me-skill-dir>/scripts/teach_me.py switch-user alice
+python3 <teach-me-skill-dir>/scripts/teach_me.py status
+```
+
+Or use the Check skill:
+
+```bash
+python3 <check-skill-dir>/scripts/check_me.py profile --add alice --name Alice
+python3 <check-skill-dir>/scripts/check_me.py profile --switch alice
+```
+
+Use Git sync options only when the user explicitly opts in:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py configure \
+  --language auto \
+  --git-remote git@github.com:user/teach-me-vault.git \
+  --auto-sync
+```
+
+If the user wants local-only versioning without a remote, use
+`--enable-git-sync` without `--git-remote`.
+
+Natural-language equivalents:
+
+- “Enable Git sync with remote git@github.com:user/teach-me-vault.git and auto-sync after writes.”
+- “Enable local git versioning for my vault without a remote.”
+
+## When To Capture
+
+At the end of a meaningful phase, score the work with this rubric. Hook-triggered
+reviews may happen even when the user's prompt did not include learning keywords,
+because the agent's actual tool activity can reveal useful learning material.
+
+- Novelty: the user is unlikely to already understand it.
+- Transferability: it helps with future projects, not only this task.
+- Project relevance: it explains how the current project or workflow actually works.
+- Hidden complexity: it reveals a mechanism that is easy to miss.
+- Future bug risk: misunderstanding it could cause bugs or mistakes later.
+- Algorithmic value: it captures a reasoning pattern, data flow, tradeoff,
+  architecture pattern, state model, dependency graph, caching strategy, parsing
+  approach, concurrency idea, or other reusable design thought.
+- User confusion signal: the user asked "why", used uncertain wording, asked for
+  review, or manually triggered teaching.
+- Concept importance: the idea itself is foundational or field-defining, scored
+  on its own merit — independent of how much tool activity produced it.
+
+Tool evidence is domain-agnostic. File edits, database migrations, test runs,
+builds, configuration changes, media processing, data analysis, browser automation,
+and error signals all count toward a Stop-hook review. But low tool activity is
+not evidence of low value: a phase spent reading a book/PDF, working through
+documentation, or discussing an article can be entirely conceptual with no
+edits, tests, or builds at all, and should be judged on Concept importance and
+Novelty rather than discounted for lacking tool evidence. The manual `import`
+workflow's summarize step should apply this rubric directly rather than
+deferring to the hook's tool-activity score.
+
+Import provenance: the `import` command returns an `origin` object. Pass it
+verbatim at the top level of every `capture`/`assess` payload that stores
+knowledge from that import, and add an item-level `origin` with `source_note`/
+`source_created`/`source_updated` for the exact source note (the import
+output's `note_meta` lists them). Imported notes get a dedicated
+external-vault frontmatter block (`external: true`, `external_vault`,
+`external_vault_path`, `source_path`, timestamps, `import_id`) — see
+`references/schemas.md` → "Import Provenance". This keeps imported vault
+knowledge distinguishable from knowledge Teach Me accumulates natively —
+never drop it. The user's linked Obsidian vault is tracked in config as
+`obsidian_vault_path` (set via `configure --obsidian-vault`; the first
+obsidian import fills it in when unset).
+
+Default behavior:
+
+- Score 9 or more: capture a full note.
+- Score 6-8: capture a compact note only if it is among the top 1-3 items.
+- Score below 6: do not teach; at most log a lightweight event.
+- Manual trigger: teach even if the current phase is small.
+
+Capture 1-3 core items by default. Capture more only when several items are
+clearly high-value and distinct.
+
+Read `references/value-rubric.md` when you need sharper judgment.
+
+## Learner Modeling
+
+Before teaching a domain that may be unfamiliar, do a quick baseline scan:
+
+1. Name the domain, for example `mihomo proxy routing`.
+2. Sketch 5-10 prerequisite concepts from basic to advanced, for example
+   `proxy`, `proxy node`, `subscription provider`, `config.yaml`,
+   `proxy group`, `selector`, `url-test`, `fallback`.
+3. Infer what the user likely knows from their wording, prior notes, and
+   questions. Mark uncertain basics as `unknown` or `seen`, not `explained`.
+4. Ask 1-3 short calibration questions only when useful, or inline a short
+   "foundation sweep" before the main explanation.
+5. Teach from the first weak prerequisite upward, then connect it to the
+   specific bug or implementation detail.
+
+Use the runtime to update the knowledge tree when you learn the user's level:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py assess <<'JSON'
+{
+  "project": {"name": "project-name", "path": "/absolute/project/path"},
+  "domain": "mihomo proxy routing",
+  "summary": "The user asked what mysub.yaml contains, so basic proxy configuration terms need a foundation sweep.",
+  "nodes": [
+    {
+      "title": "mihomo",
+      "mastery": "seen",
+      "confidence": 0.4,
+      "prerequisites": ["proxy"],
+      "gaps": ["May not yet have a crisp model of what a local proxy daemon does."],
+      "probes": ["What does mihomo do between your browser and the remote server?"],
+      "evidence": ["Asked for basic definitions after fallback explanation."]
+    },
+    {
+      "title": "proxy node",
+      "mastery": "unknown",
+      "confidence": 0.25,
+      "prerequisites": ["proxy server"],
+      "probes": ["What fields would you expect a node to need: name, server, port, password, protocol?"]
+    }
+  ],
+  "questions": [
+    "Can you explain the difference between a proxy node and a proxy group?"
+  ]
+}
+JSON
+```
+
+The knowledge tree is allowed to grow even when no full concept note is worth
+writing. Use it to avoid repeating what the user already knows and to revisit
+weak prerequisites later.
+
+## Active Feedback Loop
+
+Do not wait only for the user to volunteer confusion. After a useful explanation
+or concept capture, ask one small, optional probe to update the knowledge tree.
+
+Default probe style:
+
+- Mostly multiple-choice or true/false checks.
+- Occasional short-answer questions when the concept is important or ambiguous.
+- Make the probe explicitly optional; the user may skip because they are busy.
+- If the user skips, continue normally and do not treat silence as evidence of
+  understanding.
+- If the user answers, update the knowledge tree with `assess`: promote mastery
+  only when the answer demonstrates it; otherwise record the gap or
+  misconception.
+
+Good probe examples:
+
+```text
+Quick optional check: in `mysub.yaml`, is a node closer to:
+A. one concrete server entry
+B. a routing policy group
+C. the whole mihomo process
+You can skip this.
+```
+
+```text
+True or false, optional: `fallback` chooses by priority order, while `url-test`
+chooses by measured latency.
+```
+
+```text
+Short answer, optional: why is hardcoding subscription node names brittle?
+```
+
+## Exam Handoff
+
+An exam is never created by a hook or automatically at Stop. When the user
+explicitly says “考考我”, “给我出套卷子”, “quiz me”, or “test me”, invoke the Teach
+Me Exam skill. It first asks for scope, question style, and time budget, then
+plans questions and records the graded result. A micro-lesson may suggest an
+exam later, but must not start one without the user's request.
+
+## What To Capture
+
+Prefer concept-first notes. Capture these categories:
+
+- Concepts: named ideas such as `Vue reactivity`, `dependency graph`,
+  `esbuild`, `event delegation`, `schema validation`.
+- Algorithmic ideas: reusable reasoning such as state lifting, incremental
+  recomputation, topological ordering, cache invalidation, optimistic updates,
+  diffing, debouncing, parsing, normalization, idempotency.
+- Workflow maps: how components, modules, services, routes, build tools, data
+  flows, or any other moving parts relate inside the current project or task.
+- Learner-model updates: prerequisite concepts, current mastery, gaps,
+  misconceptions, probes, and evidence about the user's understanding. These
+  updates feed the learner portrait.
+
+Tool names are signals, not the target. Do not capture `npm install` or any
+surface command merely because it ran. Capture the underlying idea if it matters.
+
+Read `references/obsidian-format.md` before changing the vault format. Read
+`references/schemas.md` before producing JSON for the runtime.
+
+## Teaching Style
+
+Infer language from the user conversation unless the configured language is not
+`auto`. Keep common technical names in English when that is clearer.
+
+Default style:
+
+- Explain from first principles.
+- Tie the idea to the current project or task.
+- Use a few concrete examples when useful.
+- Use analogies at a medium level, then adapt based on feedback.
+- Ask at most one gentle, optional, single-part probe after an important
+  capture, mostly as multiple-choice or true/false. Skip it when the answer is
+  already clear or the user requested brevity.
+
+Users can shape the AI's teaching personality by setting a free-text speaking
+style and teaching persona:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py style \
+  --speaking-style "friendly coach" \
+  --teach-me-persona "a curious peer who explains simply and asks one short question"
+```
+
+They can also switch profiles or knowledge depth directly:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py style \
+  --teacher-style coach \
+  --knowledge-focus implementation
+python3 <teach-me-skill-dir>/scripts/teach_me.py style \
+  --teacher-style custom \
+  --custom-teacher-style "像严谨但不啰嗦的资深工程师，先给结论再讲原因"
+```
+
+Use these to shape how you talk to the user: formal or casual, concise or
+verbose, mentor or peer, Socratic or direct, etc. Do not ignore them. When a
+style is configured, adopt that voice consistently in explanations, probes, and
+reviews. The Check skill can also update style without running the main runtime:
+
+```bash
+python3 <check-skill-dir>/scripts/check_me.py style --set speaking_style "concise mentor"
+```
+
+## Learner Portrait
+
+Teach Me maintains a local learner portrait for each user. It is built from:
+
+- `learning-state.json`: mastery scores, review history, ease factors, and
+  project associations for every captured concept.
+- `Knowledge_Tree.md` and the knowledge tree data: prerequisites, gaps,
+  misconceptions, probes, and relationships between concepts.
+- `style-profile.json`: how the user prefers to be taught.
+- `events.jsonl`: raw signals about what tools were used and when.
+
+Use the portrait to avoid repeating what the user already knows, to revisit weak
+prerequisites, and to calibrate explanations. Update the portrait with
+`teach_me.py assess` whenever you learn something new about the user's
+understanding. The portrait belongs to the user and stays in their local vault.
+
+Occasionally ask for style feedback after valuable notes, not every time:
+
+```text
+This explanation used first principles plus project examples. For future notes,
+should I use more analogies, fewer analogies and more examples, more questions, or
+keep this style?
+```
+
+If the user answers, update the style profile with:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py style --analogy medium --code high --socratic gentle
+```
+
+Adjust flags to match the answer.
+
+## Capture Workflow
+
+At a phase boundary:
+
+1. Decide whether there are 1-3 high-value items.
+2. If none, say nothing about Teach Me unless the user asked.
+3. If Teach Me is uninitialized, ask for first-use confirmation before capture.
+4. Build a JSON payload following `references/schemas.md`.
+5. Run:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py capture <<'JSON'
+{
+  "project": {"name": "project-name", "path": "/absolute/project/path"},
+  "phase": "Short description of the completed phase",
+  "language": "auto",
+  "summary": "One-sentence learning summary.",
+  "items": [
+    {
+      "type": "concept",
+      "title": "dependency graph",
+      "importance": 8,
+      "mastery": "seen",
+      "confidence": 0.7,
+      "prerequisites": ["module", "import statement"],
+      "why_it_matters": "It explains how build tools know what must be rebuilt.",
+      "first_principles": [
+        "A program is split across files.",
+        "Imports create edges between those files.",
+        "A build tool can follow those edges to decide what changed."
+      ],
+      "current_project_context": "Vite follows imports from the entry file to serve and rebuild modules.",
+      "relationships": [
+        {"target": "Vite", "relation": "uses"},
+        {"target": "incremental rebuild", "relation": "enables"}
+      ],
+      "gaps": [
+        "The user may not yet connect imports to graph edges."
+      ],
+      "probes": [
+        "What changes if a file has no importers?"
+      ],
+      "socratic_questions": [
+        "If one imported file changes, how could a build tool avoid rebuilding everything?"
+      ]
+    }
+  ]
+}
+JSON
+```
+
+6. In the final response, do not just announce that you captured notes. Briefly
+   teach the user the most valuable point **from the substance of what they did or
+   produced**, not from the tool mechanics:
+   - First decide keep-or-skip from what you already know of the work: a purely
+     mechanical phase, or the user opting out, means no lesson at all — reply
+     with `⏭️` plus one short reason phrase, no commands.
+   - When teaching, run `python3 <teach-me-skill-dir>/scripts/teach_me.py context --full` to load
+     the user's learning portrait: weak concepts, knowledge-tree weak nodes,
+     style preferences, and recent captures.
+   - Use the portrait to choose what to teach: avoid repeating mastered concepts
+     and start from the first weak prerequisite.
+   - Look at the actual content (the note, code, design, writing, analysis).
+   - Output the lesson in the compact Teaching Output Contract shape: a `💡`
+     line with one plain sentence naming the core mechanism (key term in bold),
+     then at most one short follow-up line opened with `❓` or `⭐️` — a Socratic
+     question, a true/false check, or an invitation to go deeper (e.g.
+     "要不要我展开讲讲？"). Omit it when empty.
+   - If the user accepts the follow-up, explain missing prerequisites first
+     (e.g. "什么是 Canvas", "什么是状态驱动动画").
+   - Only after the micro-lesson, add the `📚 已记入 [[...]]` line for captured
+     notes.
+
+Example:
+
+```text
+🌱 [领域：软件工程] [项目：动画编辑器]
+💡 核心思路是**集中状态驱动动画**：所有动画状态集中管理，UI 只按状态重绘，交互和动画逻辑就不会散落各处。
+❓ 一个小问题（可跳过）：状态更新和重绘频率不一致时，你会先改状态再重绘，还是直接操作 Canvas？
+📚 已记入 [[单文件 WebUI 的集中状态驱动动画]]
+```
+
+## Importing external knowledge
+
+When the user explicitly asks to import knowledge from an external source — PDF, URL, text file, Markdown, EPUB, Word doc, or an entire Obsidian vault — use the `import` command:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py import --source pdf --path /path/to/file.pdf --project "Book Name"
+python3 <teach-me-skill-dir>/scripts/teach_me.py import --source url --path https://example.com/article.html --project "Blog"
+python3 <teach-me-skill-dir>/scripts/teach_me.py import --source text --path /path/to/notes.md --project "Docs"
+python3 <teach-me-skill-dir>/scripts/teach_me.py import --source stdin --project "Chat" < article.txt
+python3 <teach-me-skill-dir>/scripts/teach_me.py import --source obsidian --path /path/to/obsidian/vault --project "My Obsidian"
+```
+
+The skill will:
+
+1. Try to extract text from the source (soft dependencies: `pymupdf`, `pypdf`, `python-docx`).
+2. Record the import provenance in `learning-state.json`.
+3. Output an `import_id` and a `prompt_for_ai` for you to extract knowledge points.
+4. If text extraction fails, it still records the attempt and asks you or the user to provide the text.
+
+### Obsidian vault import
+
+To import an existing Obsidian vault, use `--source obsidian` and point `--path` at the vault root. The runtime will:
+
+- Walk all `.md` files recursively.
+- Skip `.teach-me/`, `.obsidian/`, `.trash/`, `.git/`, generated system notes (`00_Index.md`, `01_Knowledge_Graph.md`, `Knowledge_Tree.md`, `Exam_History.md`), and any note whose frontmatter says `type: teach-me/...`.
+- Refuse to import the vault into itself.
+
+Natural-language triggers:
+
+- “导入我的 Obsidian vault”
+- “link my Obsidian vault to Teach Me”
+- “把我磁盘上的 Obsidian 笔记导入知识库”
+
+### After `import`: teach first, then ask familiarity
+
+After `import` succeeds, do **not** silently inject notes. Follow this flow:
+
+1. **Summarize the material for the user.** In 2–4 sentences, explain the core ideas, why they matter, and how they connect to concepts already in the vault (if any). Match the user's configured `speaking_style` and `teach_me_persona`. Keep it concrete and avoid hype.
+2. **Confirm it is in the knowledge base.** Say something like: “这段材料已经记录进你的知识库，接下来我会把它拆成知识点。” / “I've added this material to your knowledge base and will extract the key concepts.”
+3. **Ask how familiar the user is.**
+   - In agents that support forms (Kimi Code CLI, Claude Code, Codex), use `AskUserQuestion` with one single-select question:
+     - **Question:** “你对这份材料的掌握程度大概是？” / “How familiar are you with this material?”
+     - **Options:**
+       - “已经很熟 —— 直接考我” / "Very familiar — test me now"
+       - “大概了解” / "Somewhat familiar"
+       - “大部分是新内容” / "Mostly new"
+       - “完全没接触过” / "Completely new"
+   - In agents without form support (e.g., OpenClaw, which only injects bootstrap context), ask the same question in plain chat text and let the user reply with the option number or phrase.
+4. **If the user says they are very familiar**, offer to start an exam:
+   - Run `python3 <exam-skill-dir>/scripts/exam.py plan --time 10 --topic <imported project>`.
+   - Generate the quiz from the plan and let the user take it.
+5. **If the user says lower familiarity**, extract knowledge points using `assess` or `capture` as usual. Set initial mastery to `seen` for imported material, not higher.
+
+When extracting, reference the source in `evidence` or `current_project_context`.
+
+Example:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py assess <<'JSON'
+{
+  "project": {"name": "Book Name"},
+  "summary": "Imported from PDF chapter 3",
+  "nodes": [
+    {
+      "title": "event sourcing",
+      "type": "concept",
+      "mastery": "seen",
+      "why_it_matters": "Stores state as a sequence of events instead of only the latest snapshot.",
+      "evidence": [{"type": "pdf_import", "summary": "Chapter 3 of Book Name", "timestamp": "2026-07-09T10:00:00"}]
+    }
+  ]
+}
+JSON
+```
+
+## Hook control
+
+Users can enable or disable Teach Me hooks across installed agents with natural language.
+
+Natural-language triggers:
+
+- “关闭所有 Teach Me 钩子” / “disable all Teach Me hooks"
+- “打开所有 Teach Me 钩子” / “enable all Teach Me hooks"
+- “stop Teach Me from interrupting me”
+- “turn on Teach Me hooks”
+
+Run:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py hooks --disable
+python3 <teach-me-skill-dir>/scripts/teach_me.py hooks --enable
+```
+
+The command tries each installed agent (Claude Code, Codex, Kimi, OpenClaw) and reports which succeeded. Failures are non-fatal.
+
+## Vault schema versioning and migration
+
+Teach Me vaults are versioned so that old vaults stay compatible when the
+runtime changes state shape, generated system notes, folder layout, or note
+frontmatter. The authoritative version is `vault_schema_version` in
+`.teach-me/learning-state.json`.
+
+When you open a vault and suspect format drift, run:
+
+```bash
+python3 <teach-me-skill-dir>/scripts/teach_me.py vault-version
+python3 <teach-me-skill-dir>/scripts/teach_me.py migrate --dry-run
+```
+
+Natural-language triggers:
+
+- “Migrate my vault to the latest schema.”
+- “我的 vault 格式是不是过期了？”
+- “Align my old vault with the new Teach Me version.”
+
+If the runtime can migrate deterministically, it will rewrite state and
+generated system notes automatically. If it reports an unsupported schema
+version, follow the AI adapter prompt in
+`references/vault-migrations.md`:
+
+1. Read `references/vault-migrations.md` for the version history and breaking
+   changes.
+2. Read `.teach-me/learning-state.json`, `00_Index.md`,
+   `01_Knowledge_Graph.md`, and `07_Learning_Profile/Knowledge_Tree.md`.
+3. Read all notes in `02_Concepts/`, `03_Algorithmic_Ideas/`,
+   `04_Project_Maps/`, `05_Socratic_Questions/`, and `06_Reviews/`.
+4. Rewrite notes and state to match the new schema, preserving every concept,
+   mastery score, review date, project association, relationship, import record,
+   capture, and assessment.
+5. Set `vault_schema_version` to the target version.
+6. Rewrite the generated system notes from the updated state.
+7. Run `vault-version` to confirm.
+
+If anything is ambiguous or could cause data loss, stop and ask the user before
+overwriting.
+
+## Mastery Updates
+
+Use these mastery levels:
+
+`unknown -> seen -> explained -> practiced -> transferable -> confident`
+
+Do not over-promote mastery because you wrote a note. A concept usually starts
+at `seen`, moves to `explained` when the user can restate it, and moves to
+`practiced` only after the user applies it.
+
+The runtime stores Anki-like review fields (`next_review`,
+`review_interval_days`, `ease`) while keeping the mastery vocabulary simple.
