@@ -15,6 +15,7 @@ available from every repository on a machine, run one of these after cloning:
 
 - Windows PowerShell: `./scripts/install-global.ps1`
 - WSL: `./scripts/install-global.sh`
+- Unified wizard: `node ./scripts/configure-skills.mjs`
 
 The PowerShell and shell scripts create the user-level `$HOME/.agents/skills`
 link used by Codex. Other agents should point their own global skill directory

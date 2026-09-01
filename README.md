@@ -4,6 +4,15 @@ Cross-platform skills shared by Codex, Pi, Claude Code, and other coding agents.
 
 ## Install globally
 
+For a unified interactive setup across agents, run:
+
+```bash
+node ./scripts/configure-skills.mjs
+```
+
+The wizard asks for the skill repository, the skills to enable, and the agents
+to configure. It supports Codex, Pi, and Claude Code on Windows and WSL.
+
 Clone this repository, then run the setup script for the environment you use:
 
 ```powershell
